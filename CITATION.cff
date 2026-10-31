@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as below."
+title: "Early Sepsis Prediction in ICU Patients using a Hybrid of Genetic Algorithm, ANFIS and Particle Swarm Optimization"
+type: software
+authors:
+  - family-names: "S"
+    given-names: "Lohith"
+  - family-names: "H"
+    given-names: "Manjunath"
+version: 2.0.0
+date-released: 2026-10-31
+license: MIT
+repository-code: "https://github.com/<your-username>/sepsis-early-warning"
+abstract: "A fuzzy ANFIS early-warning model for ICU sepsis whose features are chosen by a Genetic Algorithm and whose membership curves are tuned by Particle Swarm Optimization, with a FastAPI backend and a web frontend."

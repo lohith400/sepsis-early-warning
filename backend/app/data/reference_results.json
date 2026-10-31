@@ -1,0 +1,39 @@
+{
+  "title": "Reference run reported in the AAT report (Google Colab, PhysioNet 2019 Training Set A)",
+  "note": "These numbers come from the Colab notebook run reported in the project report. They are static reference values and are independent of whichever model the web app has loaded.",
+  "dataset": {
+    "patients": 20336, "records": 790215, "sepsis_records": 17136, "sepsis_patients": 1790,
+    "validation_rows": 157812, "test_rows": 159397, "test_sepsis_rate": 0.0214
+  },
+  "selected_features": ["HR", "BUN", "ICULOS", "Resp_m6", "Temp_s6"],
+  "timing": {"ga_s": 14.6, "pso_s": 98.1, "predict_us_per_record": 1.48},
+  "threshold": 0.0133,
+  "stages": {
+    "ga_quick_auc_selected": 0.7213, "ga_quick_auc_all": 0.7287,
+    "pso_loss_start": 0.2848, "pso_loss_end": 0.2435,
+    "val_auc_kmeans_only": 0.7164, "val_auc_after_pso": 0.7283
+  },
+  "confusion": {"tn": 71461, "fp": 84522, "fn": 556, "tp": 2858},
+  "models": [
+    {"model": "GA + ANFIS + PSO (ours)", "auroc": 0.7547, "auprc": 0.0860, "sensitivity": 0.837, "specificity": 0.458, "precision": 0.033, "accuracy": 0.466, "false_alarms_per_true_alert": 29.6, "sepsis_patients_alerted": 1.0, "non_sepsis_patients_alerted": 0.988},
+    {"model": "Logistic Regression (GA features)", "auroc": 0.7270, "auprc": 0.0835, "sensitivity": 0.843, "specificity": 0.374, "precision": 0.029, "accuracy": 0.384, "false_alarms_per_true_alert": 33.9, "sepsis_patients_alerted": 0.927, "non_sepsis_patients_alerted": 0.916},
+    {"model": "Random Forest (GA features)", "auroc": 0.7642, "auprc": 0.0994, "sensitivity": 0.850, "specificity": 0.456, "precision": 0.033, "accuracy": 0.465, "false_alarms_per_true_alert": 29.2, "sepsis_patients_alerted": 0.997, "non_sepsis_patients_alerted": 0.980},
+    {"model": "Logistic Regression (all features)", "auroc": 0.7483, "auprc": 0.0929, "sensitivity": 0.826, "specificity": 0.453, "precision": 0.032, "accuracy": 0.461, "false_alarms_per_true_alert": 30.3, "sepsis_patients_alerted": 0.936, "non_sepsis_patients_alerted": 0.879},
+    {"model": "Random Forest (all features)", "auroc": 0.8100, "auprc": 0.1107, "sensitivity": 0.825, "specificity": 0.613, "precision": 0.045, "accuracy": 0.618, "false_alarms_per_true_alert": 21.4, "sepsis_patients_alerted": 0.969, "non_sepsis_patients_alerted": 0.774}
+  ],
+  "rules": [
+    {"id": 1, "HR": 87.7, "BUN": 3.6, "ICULOS": 38.8, "Resp_m6": 21.3, "Temp_s6": 0.3},
+    {"id": 2, "HR": 75.3, "BUN": 15.3, "ICULOS": 1.0, "Resp_m6": 18.9, "Temp_s6": 0.8},
+    {"id": 3, "HR": 101.0, "BUN": 9.4, "ICULOS": 50.8, "Resp_m6": 15.8, "Temp_s6": 0.2},
+    {"id": 4, "HR": 48.5, "BUN": 1.0, "ICULOS": 104.1, "Resp_m6": 17.4, "Temp_s6": 0.0},
+    {"id": 5, "HR": 84.4, "BUN": 76.7, "ICULOS": 34.0, "Resp_m6": 20.2, "Temp_s6": 0.0},
+    {"id": 6, "HR": 87.4, "BUN": 34.6, "ICULOS": 118.2, "Resp_m6": 21.9, "Temp_s6": 0.2},
+    {"id": 7, "HR": 94.0, "BUN": 25.8, "ICULOS": 13.0, "Resp_m6": 18.2, "Temp_s6": 0.4},
+    {"id": 8, "HR": 102.0, "BUN": 2.6, "ICULOS": 12.4, "Resp_m6": 26.2, "Temp_s6": 0.3}
+  ],
+  "limitations": [
+    "Precision is about 3%: roughly 30 false alarms for every true alert when alerts are checked every hour.",
+    "The GA selected ICULOS (hours in ICU), a time indicator and not a body measurement.",
+    "Single run on Training Set A only; validation and test AUROC differ because they are different groups of patients."
+  ]
+}

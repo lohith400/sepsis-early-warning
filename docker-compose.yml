@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports: ["8000:8000"]
+    volumes:
+      - ./artifacts:/app/artifacts      # put a trained model.json here and restart
+    restart: unless-stopped
+
+  trainer:                              # docker compose --profile train run --rm trainer
+    build: .
+    profiles: ["train"]
+    command: ["python", "-m", "sepsis.train", "--download", "--quick", "--data-dir", "data/setA", "--out", "artifacts/model.json"]
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data

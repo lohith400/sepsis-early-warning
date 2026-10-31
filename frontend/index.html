@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sepsis Early Warning · GA + ANFIS + PSO</title>
+  <meta name="description" content="Fuzzy early-warning model for ICU sepsis built with a Genetic Algorithm, ANFIS and Particle Swarm Optimization.">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#monitor" aria-label="Sepsis Early Warning">
+      <svg viewBox="0 0 48 48" class="brand-mark" aria-hidden="true">
+        <rect width="48" height="48" rx="12" fill="#E3F4F3"/>
+        <path d="M6 26h8l4-10 6 20 5-14 3 4h10" fill="none" stroke="#1F9E9A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span><b>Sepsis Watch</b><small>ICU early warning</small></span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#monitor" data-page="monitor"><i class="ic ic-pulse"></i>Patient monitor</a>
+      <a href="#model" data-page="model"><i class="ic ic-flow"></i>How the model works</a>
+      <a href="#performance" data-page="performance"><i class="ic ic-chart"></i>Performance</a>
+      <a href="#about" data-page="about"><i class="ic ic-info"></i>About &amp; safety</a>
+    </nav>
+    <div class="side-foot">
+      <div class="chip chip-soft" id="modelChip">Loading model…</div>
+      <a class="link-small" href="/docs" target="_blank" rel="noopener">API documentation ↗</a>
+      <p class="tiny">B.M.S. College of Engineering · Dept. of Computer Applications · Soft Computing AAT</p>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+      <div>
+        <h1 id="pageTitle">Patient monitor</h1>
+        <p id="pageSub" class="sub"></p>
+      </div>
+      <svg class="ecg" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22h90l8-12 10 26 10-34 12 28 8-8h70l8-12 10 26 10-34 12 28 8-8h144" fill="none" stroke="#1F9E9A" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </header>
+
+    <div id="demoBanner" class="banner banner-warn" hidden>
+      <b>Synthetic test model loaded.</b> This is not the project's trained model and its numbers say nothing about real patients.
+      Remove <code>MODEL_PATH</code> and use <code>artifacts/model.json</code> exported from the Colab notebook.
+    </div>
+
+    <div id="view"></div>
+
+    <footer class="footer">
+      Research prototype built for a university course (Soft Computing AAT). <b>Not a medical device</b> and not for clinical decisions.
+    </footer>
+  </main>
+</div>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
