@@ -1,9 +1,11 @@
-/* Sepsis Watch UI: hash-routed single page app that talks to the FastAPI backend. */
+/* Sepsis Watch UI: hash-routed single page app that talks to the FastAPI backend.
+   Clinical Command Center edition: light/dark theme, SVG threat gauge, spline telemetry, XAI meters.
+   API routes, payload keys and state handling are unchanged. */
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const esc = Charts.esc;
   const view = $("#view");
-  const COLORS = ["#1F9E9A", "#4A90C2", "#D9962B", "#8E7CC3", "#7FA35C", "#C26D8A"];
+  const COLORS = ["#6366F1", "#22D3EE", "#F59E0B", "#A78BFA", "#34D399", "#FB7185"];
   const DASH = [null, "6 3", "2 3", "8 3 2 3", "10 4", "3 3"];
   const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
   const num = (v, d = 3) => Number(v).toFixed(d);
@@ -22,8 +24,36 @@
     about: ["About & safety", "What this project is, what it is not, and how to reproduce it."],
   };
 
+  /* ---------------- THEME (light / dark, persisted in localStorage) ---------------- */
+  const THEME_KEY = "sepsis-theme";
+  const getTheme = () => (document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    const b = $("#themeToggle");
+    if (b) {
+      b.setAttribute("aria-checked", t === "dark" ? "true" : "false");
+      b.setAttribute("aria-label", t === "dark" ? "Switch to light theme" : "Switch to dark theme");
+    }
+  }
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+    applyTheme(saved === "dark" || saved === "light" ? saved : getTheme());
+    const b = $("#themeToggle");
+    if (!b) return;
+    b.addEventListener("click", () => {
+      const next = getTheme() === "dark" ? "light" : "dark";
+      const root = document.documentElement;
+      root.classList.add("theme-anim");
+      applyTheme(next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+      setTimeout(() => root.classList.remove("theme-anim"), 450);
+    });
+  }
+
   /* ---------------- shell ---------------- */
   async function boot() {
+    initTheme();
     window.addEventListener("hashchange", route);
     $("#menuBtn").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
     try {
@@ -65,7 +95,7 @@
     const used = new Set(S.model.required_inputs);
     view.innerHTML = `
     <div class="card">
-      <div class="card-head"><div><h2>Patient data</h2><p>Hourly records in time order. Leave a cell empty if it was not measured. Columns marked <span style="color:var(--teal)">●</span> are used by the loaded model.</p></div></div>
+      <div class="card-head"><div><h2>ICU vital registration matrix</h2><p>Hourly records in time order. Leave a cell empty if it was not measured. Columns marked <span style="color:var(--accent)">●</span> are used by the loaded model.</p></div></div>
       <div class="toolbar">
         <label class="field">Example patient<select id="sampleSel">${S.samples.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join("")}</select></label>
         <button class="btn" id="loadSample">Load example</button>
@@ -78,7 +108,7 @@
       </div>
       <p class="note" id="sampleNote" style="margin:10px 0 0"></p>
       <div id="msg"></div>
-      <div class="scroll" style="margin-top:12px;max-height:340px"><table class="data-table" id="tbl"></table></div>
+      <div class="scroll" style="margin-top:12px;max-height:340px"><table class="data-table matrix" id="tbl"></table></div>
     </div>
     <div id="result"></div>`;
     const sel = $("#sampleSel");
@@ -146,51 +176,94 @@
     if (!R) { box.innerHTML = `<div class="card empty">Load an example or enter values, then press <b>Assess risk</b>.</div>`; return; }
     const sm = R.summary, last = R.hours[R.hours.length - 1], thr = R.threshold, alert = sm.last_status === "alert";
     box.innerHTML = `
-    <div class="grid g4" style="margin-bottom:18px">
-      <div class="tile ${alert ? "alert" : "ok"}"><div class="k">Current risk (hour ${last.hour})</div><div class="v">${risk(last.risk)}</div><div class="n"><span class="chip ${alert ? "chip-alert" : "chip-ok"}">${alert ? "ALERT" : "Normal"}</span> threshold ${risk(thr)}</div></div>
-      <div class="tile"><div class="k">Peak risk</div><div class="v">${risk(sm.max_risk)}</div><div class="n">over ${sm.n_hours} hours</div></div>
-      <div class="tile"><div class="k">Hours in alert</div><div class="v">${sm.hours_in_alert}<span style="font-size:1rem;color:var(--muted)"> / ${sm.n_hours}</span></div><div class="n">first alert: ${sm.first_alert_hour ? "hour " + sm.first_alert_hour : "none"}</div></div>
-      <div class="tile"><div class="k">Sustained alert (≥${R.sustained_hours} h in a row)</div><div class="v">${sm.first_sustained_alert_hour ? "hour " + sm.first_sustained_alert_hour : "none"}</div><div class="n">extension, not part of the evaluated model</div></div>
+    <div class="hero">
+      <div class="card gauge-card">
+        <div class="card-head"><div><h2>Sepsis threat gauge</h2><p id="gaugeSub">Click a point or row to move the dial.</p></div></div>
+        <div id="gauge"></div>
+        <div class="gauge-legend"><span><i style="background:var(--ok)"></i>Below threshold</span><span><i style="background:var(--danger)"></i>Alert zone</span><span><i class="t"></i>Threshold ${risk(thr)}</span></div>
+      </div>
+      <div class="kpis">
+        <div class="tile ${alert ? "alert" : "ok"}"><div class="k">Current risk (hour ${last.hour})</div><div class="v">${risk(last.risk)}</div><div class="n"><span class="chip ${alert ? "chip-alert" : "chip-ok"}">${alert ? "ALERT" : "Normal"}</span> threshold ${risk(thr)}</div></div>
+        <div class="tile"><div class="k">Peak risk</div><div class="v">${risk(sm.max_risk)}</div><div class="n">over ${sm.n_hours} hours</div></div>
+        <div class="tile"><div class="k">Hours in alert</div><div class="v">${sm.hours_in_alert}<span style="font-size:1rem;color:var(--muted)"> / ${sm.n_hours}</span></div><div class="n">first alert: ${sm.first_alert_hour ? "hour " + sm.first_alert_hour : "none"}</div></div>
+        <div class="tile"><div class="k">Sustained alert (≥${R.sustained_hours} h in a row)</div><div class="v">${sm.first_sustained_alert_hour ? "hour " + sm.first_sustained_alert_hour : "none"}</div><div class="n">extension, not part of the evaluated model</div></div>
+      </div>
     </div>
-    <div class="grid g2" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
-      <div class="card"><div class="card-head"><div><h2>Risk over time</h2><p>Click a point to see why the model reacted at that hour.</p></div></div><div class="chart" id="riskChart"></div></div>
+    <div class="split">
+      <div class="card"><div class="card-head"><div><h2>Medical telemetry · risk waveform</h2><p>Click a node to see why the model reacted at that hour.</p></div></div><div class="chart" id="riskChart"></div></div>
       <div class="card" id="whyCard"></div>
     </div>
     <div class="card"><div class="card-head"><div><h2>Hour by hour</h2><p>Click a row to inspect it.</p></div></div>
-      <div class="scroll" style="max-height:300px"><table id="hrTbl"><thead><tr><th>Hour</th><th class="num">ICU hour</th><th class="num">Risk</th><th>Status</th><th>Main rule</th>${S.model.selected_features.map(f => `<th class="num" title="${esc(f.label)}">${esc(f.name)}</th>`).join("")}</tr></thead><tbody>
-      ${R.hours.map((h, i) => `<tr data-i="${i}" class="${i === S.sel ? "hl" : ""}" style="cursor:pointer"><td>${h.hour}</td><td class="num">${h.iculos}</td><td class="num">${risk(h.risk)}</td><td><span class="chip ${h.alert ? "chip-alert" : "chip-ok"}">${h.alert ? "Alert" : "Normal"}</span>${h.sustained_alert ? ' <span class="chip chip-warn">sustained</span>' : ""}</td><td>Rule ${h.top_rule}</td>${S.model.selected_features.map(f => `<td class="num">${h.inputs[f.name]}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
-    drawRisk(); drawWhy();
+      <div class="scroll" style="max-height:320px"><table id="hrTbl" class="matrix"><thead><tr><th>Hour</th><th class="num">ICU hour</th><th class="num">Risk</th><th>Status</th><th>Main rule</th>${S.model.selected_features.map(f => `<th class="num" title="${esc(f.label)}">${esc(f.name)}</th>`).join("")}</tr></thead><tbody>
+      ${R.hours.map((h, i) => `<tr data-i="${i}" class="${i === S.sel ? "hl" : ""}" style="cursor:pointer"><td>${h.hour}</td><td class="num">${h.iculos}</td><td class="num risk-cell">${risk(h.risk)}</td><td><span class="chip ${h.alert ? "chip-alert" : "chip-ok"}">${h.alert ? "Alert" : "Normal"}</span>${h.sustained_alert ? ' <span class="chip chip-warn">sustained</span>' : ""}</td><td>Rule ${h.top_rule}</td>${S.model.selected_features.map(f => `<td class="num">${h.inputs[f.name]}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
+    drawGauge(); drawRisk(); drawWhy();
     $("#hrTbl tbody").querySelectorAll("tr").forEach(tr => tr.addEventListener("click", () => select(+tr.dataset.i)));
   }
 
   function select(i) {
-    S.sel = i; drawRisk(); drawWhy();
+    S.sel = i; drawGauge(); drawRisk(); drawWhy();
     document.querySelectorAll("#hrTbl tbody tr").forEach(tr => tr.classList.toggle("hl", +tr.dataset.i === i));
+  }
+
+  /* Semi-circle threat gauge. The arc length L is animated with CSS stroke-dashoffset (see .gauge .gv in index.html).
+     Scale maximum is derived from the threshold and the peak risk so rare-event probabilities fill the dial usefully. */
+  function drawGauge() {
+    const R = S.result, box = $("#gauge"); if (!box) return;
+    const h = R.hours[S.sel], thr = R.threshold, L = Math.PI * 80;
+    const gMax = Math.min(1, Math.max(0.05, Math.ceil(Math.max(thr * 2.5, R.summary.max_risk * 1.15) / 0.05 - 1e-9) * 0.05));
+    const f = Math.min(1, h.risk / gMax), ft = Math.min(1, thr / gMax);
+    let built = false;
+    if (!box.querySelector(".gv")) {
+      built = true;
+      const arc = "M 20 100 A 80 80 0 0 1 180 100", ang = Math.PI * ft;
+      const px = r => (100 - r * Math.cos(ang)).toFixed(2), py = r => (100 - r * Math.sin(ang)).toFixed(2);
+      box.innerHTML = `<svg class="gauge" viewBox="0 0 200 124" role="img" aria-label="Sepsis risk gauge">
+          <path class="g-z1" d="${arc}" style="stroke-dasharray:${L * ft} ${L}"/>
+          <path class="g-z2" d="${arc}" style="stroke-dasharray:${L * (1 - ft)} ${L};stroke-dashoffset:${-L * ft}"/>
+          <path class="gv" d="${arc}" style="stroke-dasharray:${L} ${L};stroke-dashoffset:${L};opacity:0"/>
+          <line class="g-tick" x1="${px(63)}" y1="${py(63)}" x2="${px(97)}" y2="${py(97)}"/>
+          <text class="g-val" x="100" y="86" text-anchor="middle"></text>
+          <text class="g-sub" x="100" y="102" text-anchor="middle"></text>
+          <text class="g-end" x="20" y="118" text-anchor="middle">0%</text>
+          <text class="g-end" x="180" y="118" text-anchor="middle">${pct(gMax, 0)}</text>
+        </svg><div class="gauge-status"></div>`;
+    }
+    const gv = box.querySelector(".gv");
+    const apply = () => { gv.style.strokeDashoffset = L * (1 - f); gv.style.opacity = f > 0 ? 1 : 0; gv.classList.toggle("alert", !!h.alert); };
+    if (built) requestAnimationFrame(() => requestAnimationFrame(apply)); else apply();
+    box.querySelector(".g-val").textContent = risk(h.risk);
+    box.querySelector(".g-sub").textContent = "hour " + h.hour;
+    box.querySelector(".gauge-status").innerHTML = `<span class="chip ${h.alert ? "chip-alert" : "chip-ok"}">${h.alert ? "Alert" : "Normal"}</span>`;
+    const sub = $("#gaugeSub"); if (sub) sub.textContent = `Hour ${h.hour} · dial scale 0–${pct(gMax, 0)}`;
   }
 
   function drawRisk() {
     const R = S.result, x = R.hours.map(h => h.hour), y = R.hours.map(h => h.risk * 100), thr = R.threshold * 100;
     const bands = []; let start = null;
-    R.hours.forEach((h, i) => { if (h.alert && start === null) start = h.hour; if ((!h.alert || i === R.hours.length - 1) && start !== null) { bands.push({ x0: start, x1: h.alert ? h.hour : R.hours[i - 1].hour, color: "rgba(212,87,78,.10)" }); start = null; } });
-    const ymax = Math.max(Math.max(...y), thr) * 1.2 || 1;
+    R.hours.forEach((h, i) => { if (h.alert && start === null) start = h.hour; if ((!h.alert || i === R.hours.length - 1) && start !== null) { bands.push({ x0: start, x1: h.alert ? h.hour : R.hours[i - 1].hour, color: "rgba(225,29,72,.16)" }); start = null; } });
+    const ymax = Math.max(Math.max(...y), thr) * 1.25 || 1;
     const lab = S.labels ? x.filter((_, i) => S.labels[i] === 1) : [];
     Charts.line($("#riskChart"), {
-      title: "Sepsis risk per hour", series: [{ name: "Risk", x, y, color: "#1F9E9A", points: true, width: 2.4 }],
+      title: "Sepsis risk per hour", series: [{ name: "Risk", x, y, color: "#6366F1", points: true, width: 2.6 }],
+      smooth: true, area: true,
       xMin: Math.min(...x), xMax: Math.max(...x), yMin: 0, yMax: ymax, xLabel: "Hour", yLabel: "Risk (%)", yFmt: v => (v < 1 ? v.toFixed(2) : v.toFixed(0)) + "%",
-      hlines: [{ y: thr, label: "alert threshold " + risk(R.threshold) }], bands, selected: S.sel, onPoint: select,
-      strip: lab.length ? { x: lab, color: "#D9962B" } : null, legend: false,
+      hlines: [{ y: thr, label: "alert threshold " + risk(R.threshold), color: "#f43f5e" }], bands, selected: S.sel, onPoint: select,
+      strip: lab.length ? { x: lab, color: "#F59E0B" } : null, legend: false,
       pointTitle: i => `Hour ${R.hours[i].hour}: ${risk(R.hours[i].risk)}`,
-      legendExtra: `<span><i style="background:#1F9E9A"></i>Risk</span><span><i style="background:rgba(212,87,78,.35)"></i>Alert hours</span>${lab.length ? '<span><i style="background:#D9962B"></i>Sepsis label in the data (from 6 h before onset)</span>' : ""}`,
+      legendExtra: `<span><i style="background:#6366F1"></i>Risk</span><span><i style="background:rgba(225,29,72,.5)"></i>Alert hours</span>${lab.length ? '<span><i style="background:#F59E0B"></i>Sepsis label in the data (from 6 h before onset)</span>' : ""}`,
     });
   }
 
   function drawWhy() {
     const R = S.result, h = R.hours[S.sel], rule = S.model.rules[h.top_rule - 1];
-    const acts = h.rule_activation.map((v, i) => ({ label: "Rule " + (i + 1), value: v * 100, text: (v * 100).toFixed(1) + "%", top: i === h.top_rule - 1 }));
+    const acts = h.rule_activation
+      .map((v, i) => ({ label: "Rule " + (i + 1), value: v * 100, text: (v * 100).toFixed(1) + "%", sub: "w " + v.toFixed(3), desc: S.model.rules[i] ? S.model.rules[i].text : "", top: i === h.top_rule - 1 }))
+      .sort((a, b) => b.value - a.value);
     const box = $("#whyCard");
-    box.innerHTML = `<div class="card-head"><div><h2>Why hour ${h.hour}?</h2><p>Risk ${risk(h.risk)} · <span class="chip ${h.alert ? "chip-alert" : "chip-ok"}">${h.alert ? "Alert" : "Normal"}</span></p></div></div>
+    box.innerHTML = `<div class="card-head"><div><h2>Explainable AI · hour ${h.hour}</h2><p>Risk ${risk(h.risk)} · <span class="chip ${h.alert ? "chip-alert" : "chip-ok"}">${h.alert ? "Alert" : "Normal"}</span></p></div></div>
+      <div class="explain"><b>Rule ${rule.id} is strongest.</b> It describes patients where ${esc(rule.text)}. Patients that look like this have a risk of about ${risk(rule.centre_risk)}.</div>
+      <p class="note" style="margin:12px 0 2px">Rule firing strength (normalised weights, sum = 100%)</p>
       <div id="rb"></div>
-      <div class="explain" style="margin-top:10px"><b>Rule ${rule.id} is strongest.</b> It describes patients where ${esc(rule.text)}. Patients that look like this have a risk of about ${risk(rule.centre_risk)}.</div>
       <p class="note" style="margin:10px 0 4px">Model inputs at this hour</p>
       <div class="pills">${S.model.selected_features.map(f => `<span class="pill">${esc(f.label)} <b>${h.inputs[f.name]}</b> <small>${esc(f.unit)}</small></span>`).join("")}</div>`;
     Charts.bars($("#rb"), acts);
@@ -232,9 +305,10 @@
     Charts.line($("#gaChart"), { series: [
       { name: "Best", x: h.ga_best.map((_, i) => i + 1), y: h.ga_best, color: COLORS[0] },
       { name: "Population mean", x: h.ga_mean.map((_, i) => i + 1), y: h.ga_mean, color: COLORS[1], dash: "6 3" }],
-      xLabel: "Generation", yLabel: "Fitness", yFmt: v => v.toFixed(3) });
+      smooth: true, xLabel: "Generation", yLabel: "Fitness", yFmt: v => v.toFixed(3) });
     Charts.line($("#psoChart"), { series: [{ name: "Best loss", x: h.pso.map((_, i) => i), y: h.pso, color: COLORS[0] }],
-      xLabel: "PSO round", yLabel: "Loss", yFmt: v => v.toFixed(3), hlines: [{ y: h.pso_start, label: "k-means start", color: "#D9962B" }],
+      smooth: true, area: true,
+      xLabel: "PSO round", yLabel: "Loss", yFmt: v => v.toFixed(3), hlines: [{ y: h.pso_start, label: "k-means start", color: "#F59E0B" }],
       yMax: Math.max(h.pso_start, ...h.pso) * 1.02, yMin: Math.min(...h.pso) * 0.98 });
   }
 
@@ -275,9 +349,9 @@
       <li><b>AUROC</b> measures how well the model ranks sick hours above healthy ones, independent of any threshold.</li>
       <li><b>Low precision is expected.</b> With rare sepsis and hourly checks, most alerts are false alarms. The model is a ranking and support tool, not a diagnosis.</li></ul></div>`;
     const rocS = Object.entries(M.curves.roc).map(([n, c], i) => ({ name: n, x: c.fpr, y: c.tpr, color: COLORS[i % 6], dash: DASH[i % 6], width: i === 0 ? 3 : 1.6 }));
-    Charts.line($("#roc"), { series: rocS, xMin: 0, xMax: 1, yMin: 0, yMax: 1, xLabel: "False positive rate", yLabel: "Sensitivity", diagonal: true, xFmt: v => v.toFixed(1), yFmt: v => v.toFixed(1) });
+    Charts.line($("#roc"), { series: rocS, smooth: false, xMin: 0, xMax: 1, yMin: 0, yMax: 1, xLabel: "False positive rate", yLabel: "Sensitivity", diagonal: true, xFmt: v => v.toFixed(1), yFmt: v => v.toFixed(1) });
     const prS = Object.entries(M.curves.pr).map(([n, c], i) => ({ name: n, x: c.recall, y: c.precision, color: COLORS[i % 6], dash: DASH[i % 6], width: i === 0 ? 3 : 1.6 }));
-    Charts.line($("#pr"), { series: prS, xMin: 0, xMax: 1, yMin: 0, yMax: 1, xLabel: "Recall", yLabel: "Precision", hlines: [{ y: M.curves.test_prevalence, label: "random", color: "#8FA6AF" }], xFmt: v => v.toFixed(1), yFmt: v => v.toFixed(1) });
+    Charts.line($("#pr"), { series: prS, smooth: false, xMin: 0, xMax: 1, yMin: 0, yMax: 1, xLabel: "Recall", yLabel: "Precision", hlines: [{ y: M.curves.test_prevalence, label: "random", color: "#94a3b8" }], xFmt: v => v.toFixed(1), yFmt: v => v.toFixed(1) });
     try {
       S.ref = S.ref || await api("/api/reference"); const R = S.ref;
       $("#refNote").textContent = R.note;
